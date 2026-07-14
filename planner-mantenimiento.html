@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Planner de Mantenimiento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="planner-mantenimiento.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">PM</div>
+      <div class="brand-text">
+        <h1>Planner de Mantenimiento</h1>
+        <p>Odómetro · Horómetro · Documentación</p>
+      </div>
+    </div>
+    <div class="session-box" id="sessionBox" style="display:none;">
+      <div class="session-info">
+        <div class="name" id="sessionName">—</div>
+        <div class="role"><span class="role-pill" id="rolePill">—</span></div>
+      </div>
+      <div class="avatar" id="avatarInitial">·</div>
+    </div>
+  </header>
+
+  <main id="mainContent">
+    <div class="state-block" id="loadingState">
+      <div class="spinner"></div>
+      <div>Conectando con MyGeotab…</div>
+    </div>
+  </main>
+
+  <footer class="hint">Planner de Mantenimiento · construido sobre la API de MyGeotab</footer>
+</div>
+
+<script>
+/* =========================================================================
+   CONFIGURACIÓN
+   ========================================================================= */
+// ID del grupo raíz del sistema (PLANNER MTTO), validado en el Runner.
+var ROOT_GROUP_ID = 'b2D08';
+
+/* =========================================================================
+   ESTADO EN MEMORIA
+   ========================================================================= */
+var STATE = {
+  api: null,
+  user: null,
+  allGroups: [],
+  groupsById: {},
+  scopeGroupId: null,   // grupo raíz de trabajo del usuario (tras resolver GroupCompanyId)
+  currentGroupId: null, // empresa actualmente seleccionada/visualizada
+  level: null           // 'super-admin' | 'sub-admin' | 'cliente'
+};
+
+/* =========================================================================
+   HELPERS DE API (promisificando api.call)
+   ========================================================================= */
+function apiCall(method, params) {
+  return new Promise(function (resolve, reject) {
+    STATE.api.call(method, params, resolve, reject);
+  });
+}
+
+function apiMultiCall(calls) {
+  return new Promise(function (resolve, reject) {
+    STATE.api.call('ExecuteMultiCall', { calls: calls }, resolve, reject);
+  });
+}
+
+/* =========================================================================
+   RESOLUCIÓN DE GRUPOS / JERARQUÍA
+   ========================================================================= */
+function indexGroups(groups) {
+  var map = {};
+  groups.forEach(function (g) { map[g.id] = g; });
+  return map;
+}
+
+function isLeaf(groupId) {
+  var g = STATE.groupsById[groupId];
+  return !g || !g.children || g.children.length === 0;
+}
+
+function getChildren(groupId) {
+  var g = STATE.groupsById[groupId];
+  if (!g || !g.children) return [];
+  return g.children
+    .map(function (c) { return STATE.groupsById[c.id]; })
+    .filter(Boolean);
+}
+
+/* Determina el nivel del usuario y su grupo raíz de trabajo */
+function resolveScope(rawCompanyGroupId) {
+  if (rawCompanyGroupId === 'GroupCompanyId') {
+    // Super-admin: sin restricción real -> se ancla al árbol del planner
+    return { level: 'super-admin', scopeGroupId: ROOT_GROUP_ID };
+  }
+  if (rawCompanyGroupId === ROOT_GROUP_ID) {
+    // Sub-administrador: ve todas las empresas debajo de PLANNER MTTO
+    return { level: 'sub-admin', scopeGroupId: ROOT_GROUP_ID };
+  }
+  // Cliente: su grupo específico (puede ser hoja o tener sub-categorías propias)
+  return { level: 'cliente', scopeGroupId: rawCompanyGroupId };
+}
+
+/* =========================================================================
+   CARGA DE VEHÍCULOS
+   ========================================================================= */
+function loadVehicles(groupId) {
+  return apiCall('Get', {
+    typeName: 'Device',
+    search: { groups: [{ id: groupId }] }
+  });
+}
+
+/* Trae odómetro/horómetro más reciente de una lista de devices, en batch */
+function loadOdoHoro(deviceIds) {
+  if (deviceIds.length === 0) return Promise.resolve({});
+  var toDate = new Date().toISOString();
+  var fromDate = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+
+  var calls = [];
+  deviceIds.forEach(function (id) {
+    calls.push({ method: 'Get', params: {
+      typeName: 'StatusData',
+      search: {
+        deviceSearch: { id: id },
+        diagnosticSearch: { id: 'DiagnosticOdometerAdjustmentId' },
+        fromDate: fromDate, toDate: toDate
+      }
+    }});
+    calls.push({ method: 'Get', params: {
+      typeName: 'StatusData',
+      search: {
+        deviceSearch: { id: id },
+        diagnosticSearch: { id: 'DiagnosticEngineHoursAdjustmentId' },
+        fromDate: fromDate, toDate: toDate
+      }
+    }});
+  });
+
+  return apiMultiCall(calls).then(function (result) {
+    var out = {};
+    deviceIds.forEach(function (id, i) {
+      var odo = result[i * 2];
+      var horo = result[i * 2 + 1];
+      out[id] = {
+        odometroKm: (odo && odo.length) ? (odo[odo.length - 1].data / 1000) : null,
+        horometroHrs: (horo && horo.length) ? (horo[horo.length - 1].data / 3600) : null
+      };
+    });
+    return out;
+  });
+}
+
+/* =========================================================================
+   RENDER
+   ========================================================================= */
+function el(tag, attrs, children) {
+  var node = document.createElement(tag);
+  attrs = attrs || {};
+  Object.keys(attrs).forEach(function (k) {
+    if (k === 'class') node.className = attrs[k];
+    else if (k === 'html') node.innerHTML = attrs[k];
+    else if (k.indexOf('on') === 0) node.addEventListener(k.slice(2), attrs[k]);
+    else node.setAttribute(k, attrs[k]);
+  });
+  (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+  return node;
+}
+
+function renderSessionBox() {
+  var box = document.getElementById('sessionBox');
+  var nameEl = document.getElementById('sessionName');
+  var roleEl = document.getElementById('rolePill');
+  var avatarEl = document.getElementById('avatarInitial');
+
+  var displayName = (STATE.user.firstName || STATE.user.name || '').trim() || STATE.user.name;
+  nameEl.textContent = displayName;
+  avatarEl.textContent = (displayName.charAt(0) || '?').toUpperCase();
+
+  var labels = {
+    'super-admin': 'Super-admin',
+    'sub-admin': 'Sub-administrador',
+    'cliente': 'Cliente'
+  };
+  roleEl.textContent = labels[STATE.level] || '—';
+  box.style.display = 'flex';
+}
+
+function renderError(message) {
+  var main = document.getElementById('mainContent');
+  main.innerHTML = '';
+  main.appendChild(el('div', { class: 'state-block' }, [
+    el('div', { class: 'error-block', html: message })
+  ]));
+}
+
+function renderScopeBar(container, opts) {
+  var bar = el('div', { class: 'scope-bar' });
+  if (opts.showBack) {
+    bar.appendChild(el('span', {
+      class: 'back-link',
+      onclick: opts.onBack,
+      html: '&larr; Cambiar de empresa'
+    }));
+    bar.appendChild(el('span', {}, [document.createTextNode('·')]));
+  }
+  bar.appendChild(el('span', {}, [document.createTextNode('Viendo:')]));
+  bar.appendChild(el('b', {}, [document.createTextNode(opts.label)]));
+  bar.appendChild(el('span', { class: 'scope-chip' }, [document.createTextNode(opts.groupId)]));
+  container.appendChild(bar);
+}
+
+function renderCompanyPicker() {
+  var main = document.getElementById('mainContent');
+  main.innerHTML = '';
+
+  var wrap = el('div', {});
+  renderScopeBar(wrap, {
+    label: STATE.level === 'super-admin' ? 'Todas las empresas (PLANNER MTTO)' : 'Tus empresas asignadas',
+    groupId: STATE.scopeGroupId,
+    showBack: false
+  });
+  wrap.appendChild(el('div', { class: 'section-title' }, [
+    document.createTextNode('Selecciona una empresa')
+  ]));
+
+  var grid = el('div', { class: 'company-grid' });
+  var children = getChildren(STATE.scopeGroupId);
+
+  if (children.length === 0) {
+    grid.appendChild(el('div', { class: 'state-block' }, [
+      document.createTextNode('Este grupo aún no tiene empresas (subgrupos) creadas.')
+    ]));
+  }
+
+  children.forEach(function (g) {
+    var subCount = g.children ? g.children.length : 0;
+    var card = el('div', {
+      class: 'company-card',
+      onclick: function () { selectCompany(g.id); }
+    }, [
+      el('div', { class: 'icon', html: '&#128188;' }),
+      el('div', { class: 'cname' }, [document.createTextNode(g.name)]),
+      el('div', { class: 'cmeta' }, [document.createTextNode(g.id + (subCount ? ' · ' + subCount + ' subgrupos' : ''))])
+    ]);
+    grid.appendChild(card);
+  });
+
+  wrap.appendChild(grid);
+  main.appendChild(wrap);
+}
+
+function odometerBlock(v) {
+  var showKm = v.odometroKm !== null && v.odometroKm !== undefined;
+  var showHrs = v.horometroHrs !== null && v.horometroHrs !== undefined;
+
+  var dash = el('div', { class: 'dash' });
+
+  if (showKm) {
+    dash.appendChild(el('div', { class: 'reading' }, [
+      el('div', { class: 'val' }, [document.createTextNode(v.odometroKm.toLocaleString('es-PE', { maximumFractionDigits: 1 }))]),
+      el('div', { class: 'lbl' }, [document.createTextNode('Odómetro (km)')])
+    ]));
+  }
+  if (showKm && showHrs) dash.appendChild(el('div', { class: 'divider' }));
+  if (showHrs) {
+    dash.appendChild(el('div', { class: 'reading' }, [
+      el('div', { class: 'val amber' }, [document.createTextNode(v.horometroHrs.toLocaleString('es-PE', { maximumFractionDigits: 1 }))]),
+      el('div', { class: 'lbl' }, [document.createTextNode('Horómetro (hrs)')])
+    ]));
+  }
+  if (!showKm && !showHrs) {
+    dash.appendChild(el('div', { class: 'reading' }, [
+      el('div', { class: 'val', style: 'color:#607079;font-size:13px;' }, [document.createTextNode('Sin lectura reciente')])
+    ]));
+  }
+  return dash;
+}
+
+function renderFleet(groupId, groupName, vehicles, readings) {
+  var main = document.getElementById('mainContent');
+  main.innerHTML = '';
+
+  var wrap = el('div', {});
+  var canGoBack = STATE.level !== 'cliente' || STATE.scopeGroupId !== groupId;
+  renderScopeBar(wrap, {
+    label: groupName,
+    groupId: groupId,
+    showBack: (STATE.level === 'super-admin' || STATE.level === 'sub-admin'),
+    onBack: renderCompanyPicker
+  });
+
+  var fh = el('div', { class: 'fleet-header' }, [
+    el('div', { class: 'section-title', style: 'margin:0;' }, [document.createTextNode('Unidades')]),
+    el('div', { class: 'fleet-count' }, [document.createTextNode(vehicles.length + ' vehículo(s)')])
+  ]);
+  wrap.appendChild(fh);
+
+  var grid = el('div', { class: 'vehicle-grid' });
+  vehicles.forEach(function (v) {
+    var r = readings[v.id] || {};
+    var card = el('div', { class: 'vehicle-card' }, [
+      el('div', { class: 'vtitle' }, [
+        el('div', {}, [
+          el('div', { class: 'vname' }, [document.createTextNode(v.name)]),
+          el('div', { class: 'vid' }, [document.createTextNode(v.id)])
+        ]),
+        el('div', { class: 'control-tag' }, [document.createTextNode('Km / Hrs')])
+      ]),
+      odometerBlock(r)
+    ]);
+    grid.appendChild(card);
+  });
+  wrap.appendChild(grid);
+  main.appendChild(wrap);
+}
+
+/* =========================================================================
+   FLUJO PRINCIPAL
+   ========================================================================= */
+function selectCompany(groupId) {
+  STATE.currentGroupId = groupId;
+  var groupName = (STATE.groupsById[groupId] || {}).name || groupId;
+
+  var main = document.getElementById('mainContent');
+  main.innerHTML = '';
+  main.appendChild(el('div', { class: 'state-block' }, [
+    el('div', { class: 'spinner' }),
+    document.createTextNode('Cargando unidades de ' + groupName + '…')
+  ]));
+
+  loadVehicles(groupId).then(function (vehicles) {
+    var ids = vehicles.map(function (v) { return v.id; });
+    return loadOdoHoro(ids).then(function (readings) {
+      renderFleet(groupId, groupName, vehicles, readings);
+    });
+  }).catch(function (err) {
+    renderError('No se pudieron cargar las unidades de esta empresa.<br><code class="inline">' + (err && err.message || err) + '</code>');
+  });
+}
+
+function boot() {
+  // El objeto `api` lo entrega MyGeotab al inicializar el Add-In (ver geotab.addin más abajo)
+  apiCall('Get', { typeName: 'User', search: { name: STATE.sessionUserName } })
+    .then(function (users) {
+      STATE.user = users[0];
+      var rawGroupId = (STATE.user.companyGroups && STATE.user.companyGroups[0])
+        ? STATE.user.companyGroups[0].id
+        : 'GroupCompanyId';
+
+      return apiCall('Get', { typeName: 'Group' }).then(function (groups) {
+        STATE.allGroups = groups;
+        STATE.groupsById = indexGroups(groups);
+
+        var scope = resolveScope(rawGroupId);
+        STATE.level = scope.level;
+        STATE.scopeGroupId = scope.scopeGroupId;
+
+        renderSessionBox();
+
+        if (STATE.level === 'cliente' && isLeaf(STATE.scopeGroupId)) {
+          // Cliente con grupo hoja -> directo a sus unidades, sin selector
+          selectCompany(STATE.scopeGroupId);
+        } else {
+          // super-admin, sub-admin, o cliente con sub-categorías propias -> mostrar selector
+          renderCompanyPicker();
+        }
+      });
+    })
+    .catch(function (err) {
+      renderError('No se pudo resolver la sesión del usuario.<br><code class="inline">' + (err && err.message || err) + '</code>');
+    });
+}
+
+/* =========================================================================
+   INTEGRACIÓN CON EL FRAMEWORK DE ADD-INS DE MYGEOTAB
+   ========================================================================= */
+geotab.addin.plannerMantenimiento = function () {
+  return {
+    initialize: function (api, state, callback) {
+      STATE.api = api;
+      api.getSession(function (session) {
+        STATE.sessionUserName = session.userName;
+        boot();
+      });
+      callback();
+    },
+    focus: function (api, state) {
+      // Se llama cada vez que el usuario entra a esta página del Add-In
+    },
+    blur: function () {
+      // Se llama al salir de la página del Add-In
+    }
+  };
+};
+</script>
+</body>
+</html>
