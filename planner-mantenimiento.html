@@ -185,7 +185,7 @@ function renderSessionBox() {
   avatarEl.textContent = (displayName.charAt(0) || '?').toUpperCase();
 
   var labels = {
-    'super-admin': 'Super-admin',
+    'super-admin': 'Admin',
     'sub-admin': 'Sub-administrador',
     'cliente': 'Cliente'
   };
@@ -213,7 +213,6 @@ function renderScopeBar(container, opts) {
   }
   bar.appendChild(el('span', {}, [document.createTextNode('Viendo:')]));
   bar.appendChild(el('b', {}, [document.createTextNode(opts.label)]));
-  bar.appendChild(el('span', { class: 'scope-chip' }, [document.createTextNode(opts.groupId)]));
   container.appendChild(bar);
 }
 
@@ -223,7 +222,7 @@ function renderCompanyPicker() {
 
   var wrap = el('div', {});
   renderScopeBar(wrap, {
-    label: STATE.level === 'super-admin' ? 'Todas las empresas (PLANNER MTTO)' : 'Tus empresas asignadas',
+    label: STATE.level === 'super-admin' ? 'Todas las empresas' : 'Tus empresas asignadas',
     groupId: STATE.scopeGroupId,
     showBack: false
   });
@@ -248,7 +247,7 @@ function renderCompanyPicker() {
     }, [
       el('div', { class: 'icon', html: '&#128188;' }),
       el('div', { class: 'cname' }, [document.createTextNode(g.name)]),
-      el('div', { class: 'cmeta' }, [document.createTextNode(g.id + (subCount ? ' · ' + subCount + ' subgrupos' : ''))])
+      el('div', { class: 'cmeta' }, [document.createTextNode(subCount ? subCount + ' subgrupos' : '')])
     ]);
     grid.appendChild(card);
   });
@@ -309,8 +308,7 @@ function renderFleet(groupId, groupName, vehicles, readings) {
     var card = el('div', { class: 'vehicle-card' }, [
       el('div', { class: 'vtitle' }, [
         el('div', {}, [
-          el('div', { class: 'vname' }, [document.createTextNode(v.name)]),
-          el('div', { class: 'vid' }, [document.createTextNode(v.id)])
+          el('div', { class: 'vname' }, [document.createTextNode(v.name)])
         ]),
         el('div', { class: 'control-tag' }, [document.createTextNode('Km / Hrs')])
       ]),
