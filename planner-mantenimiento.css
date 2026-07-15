@@ -79,7 +79,7 @@
     font-weight:700;font-size:13px;
   }
 
-  main{flex:1;padding:24px 0;width:100%;max-width:min(1500px, 94vw);margin:0 auto;box-sizing:border-box;}
+  main{flex:1;padding:24px 0;width:100%;box-sizing:border-box;}
 
   /* ---------- States ---------- */
   .state-block{
@@ -166,6 +166,6 @@
 
   footer.hint{
     text-align:center;padding:22px;font-size:11.5px;color:var(--ink-soft);
-    max-width:min(1500px, 94vw);margin:0 auto;
+    width:100%;box-sizing:border-box;
   }
   code.inline{background:var(--surface);border:1px solid var(--line);padding:1px 6px;border-radius:4px;font-family:var(--font-mono);}
