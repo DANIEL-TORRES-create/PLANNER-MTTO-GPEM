@@ -179,9 +179,10 @@ function renderSessionBox() {
   var roleEl = document.getElementById('rolePill');
   var avatarEl = document.getElementById('avatarInitial');
 
-  var displayName = (STATE.user.firstName || STATE.user.name || '').trim() || STATE.user.name;
+  var displayName = (STATE.user && (STATE.user.firstName || STATE.user.name)) || STATE.sessionUserName || 'Usuario';
+  displayName = String(displayName).trim() || 'Usuario';
   nameEl.textContent = displayName;
-  avatarEl.textContent = (displayName.charAt(0) || '?').toUpperCase();
+  avatarEl.textContent = displayName.charAt(0).toUpperCase();
 
   var labels = {
     'super-admin': 'Admin',
