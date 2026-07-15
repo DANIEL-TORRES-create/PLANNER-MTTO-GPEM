@@ -118,7 +118,8 @@
   .section-title{font-size:13px;font-weight:600;color:var(--ink-soft);
     text-transform:uppercase;letter-spacing:.6px;margin:0 0 14px;}
   .company-grid{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:14px;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,320px));gap:14px;
+    justify-content:start;
   }
   .company-card{
     background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
@@ -137,7 +138,7 @@
   .fleet-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
   .fleet-count{font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);}
   .vehicle-grid{
-    display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px;
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,340px));gap:12px;
     justify-content:start;
   }
   .vehicle-card{
