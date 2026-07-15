@@ -24,7 +24,7 @@
     font-family:var(--font-ui);
     -webkit-font-smoothing:antialiased;
   }
-  #app{min-height:100vh;display:flex;flex-direction:column;}
+  #app{display:flex;flex-direction:column;}
 
   /* ---------- Header ---------- */
   header.topbar{
