@@ -442,32 +442,51 @@ function anchoSeguroDisponible() {
   return Math.max(280, window.innerWidth - offsetIzquierdo);
 }
 
+var MARGEN_LATERAL = 16;
+
 function forzarEstiloHeader() {
+  var app = document.getElementById('app');
   var header = document.querySelector('header.topbar');
+  var main = document.getElementById('mainContent');
+  var footer = document.querySelector('footer.hint');
   var sessionBox = document.getElementById('sessionBox');
-  if (!header) return;
+  if (!app || !header) return;
 
   var anchoSeguro = anchoSeguroDisponible();
-  var margenLateral = 16;
-  var anchoHeader = anchoSeguro - (margenLateral * 2);
+  var anchoContenido = anchoSeguro - (MARGEN_LATERAL * 2);
 
-  var props = {
-    'margin': '16px ' + margenLateral + 'px 0 ' + margenLateral + 'px',
-    'padding': '18px 32px',
+  // #app pierde su padding propio: TODO el espaciado lateral pasa a
+  // depender de este único cálculo, para header/main/footer por igual.
+  app.style.setProperty('padding', '0', 'important');
+  app.style.setProperty('max-width', anchoSeguro + 'px', 'important');
+  app.style.setProperty('box-sizing', 'border-box', 'important');
+
+  var propsHeader = {
+    'margin': '16px ' + MARGEN_LATERAL + 'px 0 ' + MARGEN_LATERAL + 'px',
+    'padding': '18px 24px',
     'border-radius': '10px',
-    'width': anchoHeader + 'px',
-    'max-width': anchoHeader + 'px',
+    'width': anchoContenido + 'px',
+    'max-width': anchoContenido + 'px',
     'box-sizing': 'border-box',
     'background': 'linear-gradient(135deg, #12354A, #1B4B66)'
   };
-  Object.keys(props).forEach(function (k) {
-    header.style.setProperty(k, props[k], 'important');
+  Object.keys(propsHeader).forEach(function (k) {
+    header.style.setProperty(k, propsHeader[k], 'important');
   });
 
-  // También corrige #app y main para que jamás dependan del ancho
-  // inflado que nos entrega MyGeotab.
-  var app = document.getElementById('app');
-  if (app) app.style.setProperty('max-width', anchoSeguro + 'px', 'important');
+  // main y footer usan EXACTAMENTE el mismo margen lateral que el header,
+  // así quedan perfectamente alineados entre sí, sin excepción.
+  if (main) {
+    main.style.setProperty('padding-left', MARGEN_LATERAL + 'px', 'important');
+    main.style.setProperty('padding-right', MARGEN_LATERAL + 'px', 'important');
+    main.style.setProperty('box-sizing', 'border-box', 'important');
+    main.style.setProperty('width', '100%', 'important');
+  }
+  if (footer) {
+    footer.style.setProperty('padding-left', MARGEN_LATERAL + 'px', 'important');
+    footer.style.setProperty('padding-right', MARGEN_LATERAL + 'px', 'important');
+    footer.style.setProperty('box-sizing', 'border-box', 'important');
+  }
 
   if (sessionBox) {
     sessionBox.style.setProperty('background', '#FFFFFF', 'important');
