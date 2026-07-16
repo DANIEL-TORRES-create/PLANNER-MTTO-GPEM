@@ -33,15 +33,14 @@
     background:linear-gradient(135deg, var(--primary-dark), var(--primary));
     color:#fff;
     padding:18px 24px;
-    margin:80px 120px 0 120px !important;
-    border-radius:60px !important;
-    border:8px solid red !important;
+    margin-top:16px;
+    border-radius:10px;
     display:flex;
     align-items:center;
     justify-content:space-between;
     flex-wrap:wrap;
     gap:12px;
-    width:auto !important;
+    width:100%;
     min-width:0;
     box-sizing:border-box;
   }
