@@ -232,12 +232,71 @@ function el(tag, attrs, children) {
   Object.keys(attrs).forEach(function (k) {
     if (k === 'class') node.className = attrs[k];
     else if (k === 'html') node.innerHTML = attrs[k];
+    else if (k === 'forceStyle') {
+      Object.keys(attrs[k]).forEach(function (prop) {
+        node.style.setProperty(prop, attrs[k][prop], 'important');
+      });
+    }
     else if (k.indexOf('on') === 0) node.addEventListener(k.slice(2), attrs[k]);
     else node.setAttribute(k, attrs[k]);
   });
   (children || []).forEach(function (c) { if (c) node.appendChild(c); });
   return node;
 }
+
+/* Estilos del panel de Planes forzados por JS (ver por qué en los
+   comentarios de crearOverlay: el CSS normal, incluso con !important,
+   puede terminar siendo ignorado dentro de MyGeotab). */
+var EST = {
+  title: { 'font-size': '15px', 'font-weight': '700', color: '#12202B', 'margin-bottom': '14px',
+    display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' },
+  close: { cursor: 'pointer', color: '#5B6B74', 'font-size': '20px', 'line-height': '1',
+    border: 'none', background: 'none' },
+  tabs: { display: 'flex', gap: '8px', 'margin-bottom': '16px' },
+  tab: function (activo) {
+    return activo
+      ? { flex: '1', padding: '9px', border: '1.5px solid #1B4B66', 'border-radius': '8px',
+          background: '#EAF1F4', cursor: 'pointer', 'font-size': '12.5px', 'font-weight': '600',
+          color: '#12354A', 'text-align': 'center' }
+      : { flex: '1', padding: '9px', border: '1.5px solid #DFE5E8', 'border-radius': '8px',
+          background: '#fff', cursor: 'pointer', 'font-size': '12.5px', 'font-weight': '600',
+          color: '#5B6B74', 'text-align': 'center' };
+  },
+  field: { 'margin-bottom': '12px' },
+  label: { display: 'block', 'font-size': '11px', 'font-weight': '600', color: '#5B6B74',
+    'text-transform': 'uppercase', 'letter-spacing': '.4px', 'margin-bottom': '5px' },
+  input: { width: '100%', padding: '9px 11px', border: '1px solid #DFE5E8', 'border-radius': '6px',
+    'font-size': '13px', 'box-sizing': 'border-box', 'font-family': 'inherit' },
+  row2: { display: 'grid', 'grid-template-columns': '1fr 1fr', gap: '10px' },
+  btnPrimary: { padding: '10px 18px', 'border-radius': '8px', 'font-size': '12.5px', 'font-weight': '600',
+    cursor: 'pointer', border: 'none', background: '#1B4B66', color: '#fff' },
+  btnOutline: { padding: '10px 18px', 'border-radius': '8px', 'font-size': '12.5px', 'font-weight': '600',
+    cursor: 'pointer', border: '1.5px solid #1B4B66', background: '#fff', color: '#1B4B66' },
+  actions: { display: 'flex', gap: '8px', 'margin-top': '16px', 'justify-content': 'flex-end' },
+  listaPlanes: { display: 'flex', 'flex-direction': 'column', gap: '6px', 'margin-bottom': '14px',
+    'max-height': '160px', 'overflow-y': 'auto' },
+  planItem: { display: 'flex', 'justify-content': 'space-between', 'align-items': 'center',
+    padding: '8px 10px', border: '1px solid #DFE5E8', 'border-radius': '6px', 'font-size': '12.5px' },
+  planNombre: { 'font-weight': '600', color: '#12202B' },
+  planMeta: { color: '#5B6B74', 'font-size': '11px', 'font-family': "'IBM Plex Mono', monospace" },
+  unidadRow: { display: 'flex', 'align-items': 'center', gap: '10px', padding: '7px 4px',
+    'border-bottom': '1px solid #F0F2F5' },
+  unidadLabel: { flex: '1', 'font-size': '12.5px', color: '#12202B', cursor: 'pointer' },
+  checkbox: { width: '16px', height: '16px', cursor: 'pointer' },
+  tabla: { width: '100%', 'border-collapse': 'collapse', 'font-size': '12px', 'margin-top': '10px' },
+  th: { background: '#EAF1F4', color: '#12354A', padding: '7px', 'text-align': 'left',
+    'font-size': '10.5px', 'text-transform': 'uppercase' },
+  td: { padding: '6px 7px', 'border-bottom': '1px solid #F0F2F5' },
+  tablaInput: { width: '100%', padding: '5px 7px', border: '1px solid #DFE5E8', 'border-radius': '4px',
+    'font-size': '12px', 'box-sizing': 'border-box' },
+  msgOk: { 'font-size': '12px', padding: '8px 10px', 'border-radius': '6px', 'margin-top': '10px',
+    background: '#EAF6EE', color: '#3F7D58' },
+  msgError: { 'font-size': '12px', padding: '8px 10px', 'border-radius': '6px', 'margin-top': '10px',
+    background: '#FBEAE6', color: '#C4432B' },
+  btnNuevoPlan: { background: '#1B4B66', color: '#fff', border: 'none', 'border-radius': '6px',
+    padding: '6px 12px', 'font-size': '11.5px', 'font-weight': '600', cursor: 'pointer',
+    display: 'flex', 'align-items': 'center', gap: '5px' }
+};
 
 function renderSessionBox() {
   var box = document.getElementById('sessionBox');
@@ -368,7 +427,7 @@ function renderFleet(groupId, groupName, vehicles, readings) {
   var fh = el('div', { class: 'fleet-header' }, [
     el('div', { class: 'section-title', style: 'margin:0;' }, [document.createTextNode('Unidades')]),
     el('div', { style: 'display:flex;align-items:center;gap:12px;' }, [
-      el('button', { class: 'btn-nuevo-plan', onclick: function () { abrirPanelPlanes(groupId); } }, [
+      el('button', { forceStyle: EST.btnNuevoPlan, onclick: function () { abrirPanelPlanes(groupId); } }, [
         document.createTextNode('+ Nuevo plan / Asignar unidades')
       ]),
       el('div', { class: 'fleet-count' }, [document.createTextNode(vehicles.length + ' vehículo(s)')])
@@ -458,18 +517,18 @@ function abrirPanelPlanes(groupId) {
   PANEL_STATE.planCreado = null;
 
   var box = crearOverlay();
-  box.appendChild(el('div', { class: 'pm-title' }, [
+  box.appendChild(el('div', { class: 'pm-title', forceStyle: EST.title }, [
     document.createTextNode('Planes de esta empresa'),
-    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+    el('button', { class: 'pm-close', forceStyle: EST.close, onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
   ]));
 
-  var lista = el('div', { class: 'pm-lista-planes', id: 'pmListaPlanes' }, [
-    el('div', { style: 'color:#5B6B74;font-size:12px;' }, [document.createTextNode('Cargando planes…')])
+  var lista = el('div', { class: 'pm-lista-planes', id: 'pmListaPlanes', forceStyle: EST.listaPlanes }, [
+    el('div', { forceStyle: { color: '#5B6B74', 'font-size': '12px' } }, [document.createTextNode('Cargando planes…')])
   ]);
   box.appendChild(lista);
 
-  box.appendChild(el('div', { class: 'pm-actions' }, [
-    el('button', { class: 'pm-btn pm-btn-primary', onclick: function () { mostrarFormNuevoPlan(groupId); } }, [
+  box.appendChild(el('div', { class: 'pm-actions', forceStyle: EST.actions }, [
+    el('button', { forceStyle: EST.btnPrimary, onclick: function () { mostrarFormNuevoPlan(groupId); } }, [
       document.createTextNode('+ Crear plan nuevo')
     ])
   ]));
@@ -479,7 +538,7 @@ function abrirPanelPlanes(groupId) {
     if (!listaEl) return;
     if (!res.success) {
       listaEl.innerHTML = '';
-      listaEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al cargar planes.')]));
+      listaEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode(res.error || 'Error al cargar planes.')]));
       return;
     }
     var todos = (res.mantenimiento || []).map(function (p) { return { p: p, tipo: 'Mantenimiento' }; })
@@ -487,7 +546,7 @@ function abrirPanelPlanes(groupId) {
 
     listaEl.innerHTML = '';
     if (todos.length === 0) {
-      listaEl.appendChild(el('div', { style: 'color:#5B6B74;font-size:12px;' }, [document.createTextNode('Todavía no hay planes creados para esta empresa.')]));
+      listaEl.appendChild(el('div', { forceStyle: { color: '#5B6B74', 'font-size': '12px' } }, [document.createTextNode('Todavía no hay planes creados para esta empresa.')]));
       return;
     }
     todos.forEach(function (item) {
@@ -495,12 +554,12 @@ function abrirPanelPlanes(groupId) {
       var meta = item.tipo === 'Mantenimiento'
         ? (item.p['Intervalo (número)'] + ' ' + item.p['Unidad (Km/Horas)'])
         : ('Vigencia: ' + (item.p['Vigencia - años'] || 0) + 'a ' + (item.p['Vigencia - meses'] || 0) + 'm');
-      listaEl.appendChild(el('div', { class: 'pm-plan-item' }, [
+      listaEl.appendChild(el('div', { forceStyle: EST.planItem }, [
         el('div', {}, [
-          el('div', { class: 'nombre' }, [document.createTextNode(nombre)]),
-          el('div', { class: 'meta' }, [document.createTextNode(item.tipo + ' · ' + meta)])
+          el('div', { forceStyle: EST.planNombre }, [document.createTextNode(nombre)]),
+          el('div', { forceStyle: EST.planMeta }, [document.createTextNode(item.tipo + ' · ' + meta)])
         ]),
-        el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { mostrarSeleccionUnidades(item.p['PlanID'], item.tipo); } }, [
+        el('button', { forceStyle: EST.btnOutline, onclick: function () { mostrarSeleccionUnidades(item.p['PlanID'], item.tipo); } }, [
           document.createTextNode('Asignar unidades')
         ])
       ]));
@@ -511,22 +570,22 @@ function abrirPanelPlanes(groupId) {
 function mostrarFormNuevoPlan(groupId) {
   PANEL_STATE.tipoPlan = 'Mantenimiento';
   var box = crearOverlay();
-  box.appendChild(el('div', { class: 'pm-title' }, [
+  box.appendChild(el('div', { class: 'pm-title', forceStyle: EST.title }, [
     document.createTextNode('Crear nuevo plan'),
-    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+    el('button', { class: 'pm-close', forceStyle: EST.close, onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
   ]));
 
-  var tabs = el('div', { class: 'pm-tabs' }, [
-    el('div', { class: 'pm-tab activo', id: 'tabMtto', onclick: function () { cambiarTabPlan('Mantenimiento'); } }, [document.createTextNode('Mantenimiento')]),
-    el('div', { class: 'pm-tab', id: 'tabDoc', onclick: function () { cambiarTabPlan('Documentación'); } }, [document.createTextNode('Documentación')])
+  var tabs = el('div', { class: 'pm-tabs', forceStyle: EST.tabs }, [
+    el('div', { id: 'tabMtto', forceStyle: EST.tab(true), onclick: function () { cambiarTabPlan('Mantenimiento'); } }, [document.createTextNode('Mantenimiento')]),
+    el('div', { id: 'tabDoc', forceStyle: EST.tab(false), onclick: function () { cambiarTabPlan('Documentación'); } }, [document.createTextNode('Documentación')])
   ]);
   box.appendChild(tabs);
 
   box.appendChild(el('div', { id: 'pmCamposPlan' }));
   box.appendChild(el('div', { id: 'pmMsgPlan' }));
-  box.appendChild(el('div', { class: 'pm-actions' }, [
-    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { abrirPanelPlanes(groupId); } }, [document.createTextNode('Volver')]),
-    el('button', { class: 'pm-btn pm-btn-primary', id: 'btnGuardarPlan', onclick: function () { guardarNuevoPlan(groupId); } }, [document.createTextNode('Guardar plan')])
+  box.appendChild(el('div', { class: 'pm-actions', forceStyle: EST.actions }, [
+    el('button', { forceStyle: EST.btnOutline, onclick: function () { abrirPanelPlanes(groupId); } }, [document.createTextNode('Volver')]),
+    el('button', { id: 'btnGuardarPlan', forceStyle: EST.btnPrimary, onclick: function () { guardarNuevoPlan(groupId); } }, [document.createTextNode('Guardar plan')])
   ]));
 
   renderCamposPlan();
@@ -534,8 +593,15 @@ function mostrarFormNuevoPlan(groupId) {
 
 function cambiarTabPlan(tipo) {
   PANEL_STATE.tipoPlan = tipo;
-  document.getElementById('tabMtto').className = 'pm-tab' + (tipo === 'Mantenimiento' ? ' activo' : '');
-  document.getElementById('tabDoc').className = 'pm-tab' + (tipo === 'Documentación' ? ' activo' : '');
+  var tabMtto = document.getElementById('tabMtto');
+  var tabDoc = document.getElementById('tabDoc');
+  Object.keys(EST.tab(true)).forEach(function (k) { tabMtto.style.removeProperty(k); tabDoc.style.removeProperty(k); });
+  Object.keys(EST.tab(tipo === 'Mantenimiento')).forEach(function (k) {
+    tabMtto.style.setProperty(k, EST.tab(tipo === 'Mantenimiento')[k], 'important');
+  });
+  Object.keys(EST.tab(tipo === 'Documentación')).forEach(function (k) {
+    tabDoc.style.setProperty(k, EST.tab(tipo === 'Documentación')[k], 'important');
+  });
   renderCamposPlan();
 }
 
@@ -543,40 +609,40 @@ function renderCamposPlan() {
   var cont = document.getElementById('pmCamposPlan');
   cont.innerHTML = '';
   if (PANEL_STATE.tipoPlan === 'Mantenimiento') {
-    cont.appendChild(el('div', { class: 'pm-field' }, [
-      el('label', {}, [document.createTextNode('Nombre del plan (opcional)')]),
-      el('input', { id: 'campoNombrePlan', placeholder: 'Ej. Cambio de aceite' })
+    cont.appendChild(el('div', { forceStyle: EST.field }, [
+      el('label', { forceStyle: EST.label }, [document.createTextNode('Nombre del plan (opcional)')]),
+      el('input', { id: 'campoNombrePlan', placeholder: 'Ej. Cambio de aceite', forceStyle: EST.input })
     ]));
-    cont.appendChild(el('div', { class: 'pm-row2' }, [
-      el('div', { class: 'pm-field' }, [
-        el('label', {}, [document.createTextNode('Intervalo')]),
-        el('input', { id: 'campoIntervalo', type: 'number', placeholder: '5000' })
+    cont.appendChild(el('div', { forceStyle: EST.row2 }, [
+      el('div', { forceStyle: EST.field }, [
+        el('label', { forceStyle: EST.label }, [document.createTextNode('Intervalo')]),
+        el('input', { id: 'campoIntervalo', type: 'number', placeholder: '5000', forceStyle: EST.input })
       ]),
-      el('div', { class: 'pm-field' }, [
-        el('label', {}, [document.createTextNode('Unidad')]),
-        el('select', { id: 'campoUnidad' }, [
+      el('div', { forceStyle: EST.field }, [
+        el('label', { forceStyle: EST.label }, [document.createTextNode('Unidad')]),
+        el('select', { id: 'campoUnidad', forceStyle: EST.input }, [
           el('option', { value: 'Km' }, [document.createTextNode('Kilómetros')]),
           el('option', { value: 'Horas' }, [document.createTextNode('Horas (horómetro)')])
         ])
       ])
     ]));
-    cont.appendChild(el('div', { class: 'pm-field' }, [
-      el('label', {}, [document.createTextNode('Tipo de servicio (opcional, ej: B1, A1, C)')]),
-      el('input', { id: 'campoTipoServicio', placeholder: 'Ej. Tipo C' })
+    cont.appendChild(el('div', { forceStyle: EST.field }, [
+      el('label', { forceStyle: EST.label }, [document.createTextNode('Tipo de servicio (opcional, ej: B1, A1, C)')]),
+      el('input', { id: 'campoTipoServicio', placeholder: 'Ej. Tipo C', forceStyle: EST.input })
     ]));
   } else {
-    cont.appendChild(el('div', { class: 'pm-field' }, [
-      el('label', {}, [document.createTextNode('Tipo de documento')]),
-      el('input', { id: 'campoTipoDoc', placeholder: 'Ej. SOAT, RTV, Tarjeta de operación' })
+    cont.appendChild(el('div', { forceStyle: EST.field }, [
+      el('label', { forceStyle: EST.label }, [document.createTextNode('Tipo de documento')]),
+      el('input', { id: 'campoTipoDoc', placeholder: 'Ej. SOAT, RTV, Tarjeta de operación', forceStyle: EST.input })
     ]));
-    cont.appendChild(el('div', { class: 'pm-row2' }, [
-      el('div', { class: 'pm-field' }, [
-        el('label', {}, [document.createTextNode('Vigencia (años)')]),
-        el('input', { id: 'campoVigAnios', type: 'number', value: '1' })
+    cont.appendChild(el('div', { forceStyle: EST.row2 }, [
+      el('div', { forceStyle: EST.field }, [
+        el('label', { forceStyle: EST.label }, [document.createTextNode('Vigencia (años)')]),
+        el('input', { id: 'campoVigAnios', type: 'number', value: '1', forceStyle: EST.input })
       ]),
-      el('div', { class: 'pm-field' }, [
-        el('label', {}, [document.createTextNode('Vigencia (meses extra)')]),
-        el('input', { id: 'campoVigMeses', type: 'number', value: '0' })
+      el('div', { forceStyle: EST.field }, [
+        el('label', { forceStyle: EST.label }, [document.createTextNode('Vigencia (meses extra)')]),
+        el('input', { id: 'campoVigMeses', type: 'number', value: '0', forceStyle: EST.input })
       ])
     ]));
   }
@@ -591,7 +657,7 @@ function guardarNuevoPlan(groupId) {
     var intervalo = document.getElementById('campoIntervalo').value;
     var unidad = document.getElementById('campoUnidad').value;
     if (!intervalo) {
-      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode('Ingresa el intervalo.')]));
+      msgEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode('Ingresa el intervalo.')]));
       return;
     }
     btn.disabled = true;
@@ -609,13 +675,13 @@ function guardarNuevoPlan(groupId) {
         mostrarSeleccionUnidades(res.planId, 'Mantenimiento');
       } else {
         msgEl.innerHTML = '';
-        msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al guardar.')]));
+        msgEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode(res.error || 'Error al guardar.')]));
       }
     });
   } else {
     var tipoDoc = document.getElementById('campoTipoDoc').value;
     if (!tipoDoc) {
-      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode('Ingresa el tipo de documento.')]));
+      msgEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode('Ingresa el tipo de documento.')]));
       return;
     }
     btn.disabled = true;
@@ -632,7 +698,7 @@ function guardarNuevoPlan(groupId) {
         mostrarSeleccionUnidades(res.planId, 'Documentación');
       } else {
         msgEl.innerHTML = '';
-        msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al guardar.')]));
+        msgEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode(res.error || 'Error al guardar.')]));
       }
     });
   }
@@ -643,29 +709,29 @@ function mostrarSeleccionUnidades(planId, tipoPlan) {
   PANEL_STATE.tipoPlan = tipoPlan;
 
   var box = crearOverlay();
-  box.appendChild(el('div', { class: 'pm-title' }, [
+  box.appendChild(el('div', { forceStyle: EST.title }, [
     document.createTextNode('Selecciona las unidades'),
-    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+    el('button', { forceStyle: EST.close, onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
   ]));
 
   var barraSeleccion = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' }, [
-    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { marcarTodasLasUnidades(true); } }, [document.createTextNode('Seleccionar todas')]),
-    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { marcarTodasLasUnidades(false); } }, [document.createTextNode('Quitar selección')])
+    el('button', { forceStyle: EST.btnOutline, onclick: function () { marcarTodasLasUnidades(true); } }, [document.createTextNode('Seleccionar todas')]),
+    el('button', { forceStyle: EST.btnOutline, onclick: function () { marcarTodasLasUnidades(false); } }, [document.createTextNode('Quitar selección')])
   ]);
   box.appendChild(barraSeleccion);
 
   var listaUnidades = el('div', { id: 'pmListaUnidades', style: 'max-height:260px;overflow-y:auto;border:1px solid #DFE5E8;border-radius:8px;padding:4px 10px;' });
   STATE.vehiculosActuales.forEach(function (v) {
-    listaUnidades.appendChild(el('div', { class: 'pm-unidad-row' }, [
-      el('input', { type: 'checkbox', id: 'chk_' + v.id, 'data-deviceid': v.id, 'data-nombre': v.name }),
-      el('label', { onclick: function () { document.getElementById('chk_' + v.id).click(); } }, [document.createTextNode(v.name)])
+    listaUnidades.appendChild(el('div', { forceStyle: EST.unidadRow }, [
+      el('input', { type: 'checkbox', id: 'chk_' + v.id, 'data-deviceid': v.id, 'data-nombre': v.name, forceStyle: EST.checkbox }),
+      el('label', { forceStyle: EST.unidadLabel, onclick: function () { document.getElementById('chk_' + v.id).click(); } }, [document.createTextNode(v.name)])
     ]));
   });
   box.appendChild(listaUnidades);
 
-  box.appendChild(el('div', { class: 'pm-actions' }, [
-    el('button', { class: 'pm-btn pm-btn-outline', onclick: cerrarPanelPlanes }, [document.createTextNode('Cancelar')]),
-    el('button', { class: 'pm-btn pm-btn-primary', onclick: mostrarTablaValorInicial }, [document.createTextNode('Continuar →')])
+  box.appendChild(el('div', { forceStyle: EST.actions }, [
+    el('button', { forceStyle: EST.btnOutline, onclick: cerrarPanelPlanes }, [document.createTextNode('Cancelar')]),
+    el('button', { forceStyle: EST.btnPrimary, onclick: mostrarTablaValorInicial }, [document.createTextNode('Continuar →')])
   ]));
 }
 
@@ -684,27 +750,28 @@ function mostrarTablaValorInicial() {
 
   var esMtto = PANEL_STATE.tipoPlan === 'Mantenimiento';
   var box = crearOverlay();
-  box.appendChild(el('div', { class: 'pm-title' }, [
+  box.appendChild(el('div', { forceStyle: EST.title }, [
     document.createTextNode('Valor inicial por unidad'),
-    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+    el('button', { forceStyle: EST.close, onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
   ]));
   box.appendChild(el('div', { style: 'font-size:11.5px;color:#5B6B74;margin-bottom:8px;' }, [
     document.createTextNode(esMtto ? 'Ingresa el último km/hora de servicio de cada unidad.' : 'Ingresa la fecha de carga actual (dd/mm/aaaa) de cada unidad.')
   ]));
 
-  var tabla = el('table', { class: 'pm-tabla-valor' });
+  var tabla = el('table', { forceStyle: EST.tabla });
   tabla.appendChild(el('thead', {}, [el('tr', {}, [
-    el('th', {}, [document.createTextNode('Unidad')]),
-    el('th', {}, [document.createTextNode(esMtto ? 'Km / Horas' : 'Fecha de carga')])
+    el('th', { forceStyle: EST.th }, [document.createTextNode('Unidad')]),
+    el('th', { forceStyle: EST.th }, [document.createTextNode(esMtto ? 'Km / Horas' : 'Fecha de carga')])
   ])]));
   var tbody = el('tbody', { id: 'pmTbodyValores' });
   seleccionadas.forEach(function (u) {
     tbody.appendChild(el('tr', {}, [
-      el('td', {}, [document.createTextNode(u.nombre)]),
-      el('td', {}, [el('input', {
+      el('td', { forceStyle: EST.td }, [document.createTextNode(u.nombre)]),
+      el('td', { forceStyle: EST.td }, [el('input', {
         id: 'valor_' + u.deviceId,
         type: esMtto ? 'number' : 'text',
-        placeholder: esMtto ? '15850' : 'dd/mm/aaaa'
+        placeholder: esMtto ? '15850' : 'dd/mm/aaaa',
+        forceStyle: EST.tablaInput
       })])
     ]));
   });
@@ -712,9 +779,9 @@ function mostrarTablaValorInicial() {
   box.appendChild(tabla);
 
   box.appendChild(el('div', { id: 'pmMsgAsignacion' }));
-  box.appendChild(el('div', { class: 'pm-actions' }, [
-    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { mostrarSeleccionUnidades(PANEL_STATE.planCreado, PANEL_STATE.tipoPlan); } }, [document.createTextNode('← Volver')]),
-    el('button', { class: 'pm-btn pm-btn-primary', id: 'btnGuardarAsignacion', onclick: function () { guardarAsignacion(seleccionadas); } }, [document.createTextNode('Guardar asignación')])
+  box.appendChild(el('div', { forceStyle: EST.actions }, [
+    el('button', { forceStyle: EST.btnOutline, onclick: function () { mostrarSeleccionUnidades(PANEL_STATE.planCreado, PANEL_STATE.tipoPlan); } }, [document.createTextNode('← Volver')]),
+    el('button', { forceStyle: EST.btnPrimary, id: 'btnGuardarAsignacion', onclick: function () { guardarAsignacion(seleccionadas); } }, [document.createTextNode('Guardar asignación')])
   ]));
 }
 
@@ -729,7 +796,7 @@ function guardarAsignacion(seleccionadas) {
   });
 
   if (unidades.some(function (u) { return !u.valorInicial; })) {
-    msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode('Completa el valor de todas las unidades.')]));
+    msgEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode('Completa el valor de todas las unidades.')]));
     return;
   }
 
@@ -745,11 +812,11 @@ function guardarAsignacion(seleccionadas) {
     btn.disabled = false;
     if (res.success) {
       msgEl.innerHTML = '';
-      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-ok' }, [document.createTextNode('¡Listo! ' + unidades.length + ' unidad(es) asignada(s) correctamente.')]));
+      msgEl.appendChild(el('div', { forceStyle: EST.msgOk }, [document.createTextNode('¡Listo! ' + unidades.length + ' unidad(es) asignada(s) correctamente.')]));
       setTimeout(cerrarPanelPlanes, 1400);
     } else {
       msgEl.innerHTML = '';
-      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al guardar la asignación.')]));
+      msgEl.appendChild(el('div', { forceStyle: EST.msgError }, [document.createTextNode(res.error || 'Error al guardar la asignación.')]));
     }
   });
 }
