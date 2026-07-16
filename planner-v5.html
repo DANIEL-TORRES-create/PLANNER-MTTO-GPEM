@@ -190,7 +190,9 @@ function renderSessionBox() {
     'cliente': 'Cliente'
   };
   roleEl.textContent = labels[STATE.level] || '—';
+  box.dataset.shouldShow = '1';
   box.style.display = 'flex';
+  forzarEstiloHeader();
 }
 
 function renderError(message) {
@@ -422,6 +424,63 @@ window.addEventListener('resize', function () {
 });
 
 /* =========================================================================
+   VIGILANTE DE ESTILOS: MyGeotab parece reprocesar/sobreescribir el header
+   del Add-In unos segundos después de la carga inicial. Esto fuerza
+   nuestros estilos vía JS (máxima prioridad posible) y los reaplica
+   en bucle, para que ninguna sobreescritura tardía gane la pelea.
+   ========================================================================= */
+function forzarEstiloHeader() {
+  var header = document.querySelector('header.topbar');
+  var sessionBox = document.getElementById('sessionBox');
+  if (!header) return;
+
+  var props = {
+    'margin': '16px 16px 0 16px',
+    'border-radius': '10px',
+    'width': 'auto',
+    'box-sizing': 'border-box',
+    'background': 'linear-gradient(135deg, #12354A, #1B4B66)'
+  };
+  Object.keys(props).forEach(function (k) {
+    header.style.setProperty(k, props[k], 'important');
+  });
+
+  if (sessionBox) {
+    sessionBox.style.setProperty('background', '#FFFFFF', 'important');
+    sessionBox.style.setProperty('border-radius', '10px', 'important');
+    sessionBox.style.setProperty('display', sessionBox.dataset.shouldShow === '1' ? 'flex' : 'none', 'important');
+  }
+}
+
+// Reaplica cada segundo durante el primer minuto (cubre cualquier
+// reprocesamiento tardío de MyGeotab), y luego cada 5s indefinidamente
+// como red de seguridad ligera.
+var _intentos = 0;
+var _intervaloEstilo = setInterval(function () {
+  forzarEstiloHeader();
+  _intentos++;
+  if (_intentos === 60) {
+    clearInterval(_intervaloEstilo);
+    setInterval(forzarEstiloHeader, 5000);
+  }
+}, 1000);
+
+// También reacciona de inmediato si detecta cambios en el propio header
+// (por si MyGeotab lo reemplaza o le toca atributos directamente).
+var _observerHeader = new MutationObserver(function () {
+  forzarEstiloHeader();
+});
+function iniciarObservadorHeader() {
+  var header = document.querySelector('header.topbar');
+  if (header) {
+    _observerHeader.observe(header, { attributes: true, attributeFilter: ['style', 'class'] });
+    _observerHeader.observe(document.body, { childList: true, subtree: false });
+  }
+}
+iniciarObservadorHeader();
+forzarEstiloHeader();
+
+/* =========================================================================
    INTEGRACIÓN CON EL FRAMEWORK DE ADD-INS DE MYGEOTAB
    ========================================================================= */
 geotab.addin.plannerMantenimiento = function () {
@@ -436,6 +495,7 @@ geotab.addin.plannerMantenimiento = function () {
     },
     focus: function (api, state) {
       // Se llama cada vez que el usuario entra a esta página del Add-In
+      forzarEstiloHeader();
     },
     blur: function () {
       // Se llama al salir de la página del Add-In
