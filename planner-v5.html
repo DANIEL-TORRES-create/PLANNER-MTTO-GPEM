@@ -7,6 +7,51 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="planner-v2.css?v=20260716b">
+<style>
+/* Estilos del panel de Planes (inline a propósito, para que nunca
+   dependan de la caché del archivo .css externo) */
+.pm-overlay{position:fixed;inset:0;background:rgba(18,32,43,.45);display:flex;
+  align-items:flex-start;justify-content:center;z-index:9999;padding:40px 16px;overflow-y:auto;}
+.pm-box{background:#fff;border-radius:12px;width:100%;max-width:560px;padding:22px;
+  box-shadow:0 12px 40px rgba(0,0,0,.25);}
+.pm-title{font-size:15px;font-weight:700;color:#12202B;margin-bottom:14px;
+  display:flex;justify-content:space-between;align-items:center;}
+.pm-close{cursor:pointer;color:#5B6B74;font-size:20px;line-height:1;border:none;background:none;}
+.pm-tabs{display:flex;gap:8px;margin-bottom:16px;}
+.pm-tab{flex:1;padding:9px;border:1.5px solid #DFE5E8;border-radius:8px;background:#fff;
+  cursor:pointer;font-size:12.5px;font-weight:600;color:#5B6B74;text-align:center;}
+.pm-tab.activo{border-color:#1B4B66;background:#EAF1F4;color:#12354A;}
+.pm-field{margin-bottom:12px;}
+.pm-field label{display:block;font-size:11px;font-weight:600;color:#5B6B74;
+  text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;}
+.pm-field input, .pm-field select{width:100%;padding:9px 11px;border:1px solid #DFE5E8;
+  border-radius:6px;font-size:13px;box-sizing:border-box;font-family:inherit;}
+.pm-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.pm-btn{padding:10px 18px;border-radius:8px;font-size:12.5px;font-weight:600;
+  cursor:pointer;border:none;}
+.pm-btn-primary{background:#1B4B66;color:#fff;}
+.pm-btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.pm-btn-outline{background:#fff;color:#1B4B66;border:1.5px solid #1B4B66;}
+.pm-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;}
+.pm-lista-planes{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-height:160px;overflow-y:auto;}
+.pm-plan-item{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 10px;border:1px solid #DFE5E8;border-radius:6px;font-size:12.5px;}
+.pm-plan-item .nombre{font-weight:600;color:#12202B;}
+.pm-plan-item .meta{color:#5B6B74;font-size:11px;font-family:var(--font-mono);}
+.pm-unidad-row{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid #F0F2F5;}
+.pm-unidad-row label{flex:1;font-size:12.5px;color:#12202B;cursor:pointer;}
+.pm-unidad-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;}
+.pm-tabla-valor{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+.pm-tabla-valor th{background:#EAF1F4;color:#12354A;padding:7px;text-align:left;font-size:10.5px;text-transform:uppercase;}
+.pm-tabla-valor td{padding:6px 7px;border-bottom:1px solid #F0F2F5;}
+.pm-tabla-valor input{width:100%;padding:5px 7px;border:1px solid #DFE5E8;border-radius:4px;font-size:12px;box-sizing:border-box;}
+.pm-msg{font-size:12px;padding:8px 10px;border-radius:6px;margin-top:10px;}
+.pm-msg-ok{background:#EAF6EE;color:#3F7D58;}
+.pm-msg-error{background:#FBEAE6;color:#C4432B;}
+.btn-nuevo-plan{background:#1B4B66;color:#fff;border:none;border-radius:6px;
+  padding:6px 12px;font-size:11.5px;font-weight:600;cursor:pointer;display:flex;
+  align-items:center;gap:5px;}
+</style>
 </head>
 <body>
 <div id="app">
@@ -42,6 +87,8 @@
    ========================================================================= */
 // ID del grupo raíz del sistema (PLANNER MTTO), validado en el Runner.
 var ROOT_GROUP_ID = 'b2D08';
+// URL del Apps Script (backend) — Google Sheet conectado.
+var URL_SCRIPT = 'https://script.google.com/macros/s/AKfycbzNBYgio0OPMZs9Irkfed0nvnztIkkb8c5b5hNbzfs8FbO1zgAQ0uVFoiGIEL-Ke-7Q/exec';
 
 /* =========================================================================
    ESTADO EN MEMORIA
@@ -53,8 +100,37 @@ var STATE = {
   groupsById: {},
   scopeGroupId: null,   // grupo raíz de trabajo del usuario (tras resolver GroupCompanyId)
   currentGroupId: null, // empresa actualmente seleccionada/visualizada
-  level: null           // 'super-admin' | 'sub-admin' | 'cliente'
+  level: null,           // 'super-admin' | 'sub-admin' | 'cliente'
+  vehiculosActuales: [], // vehículos de la empresa actualmente vista (de Geotab)
+  planesActuales: { mantenimiento: [], documentacion: [] }
 };
+
+/* =========================================================================
+   COMUNICACIÓN CON APPS SCRIPT (patrón JSONP, sin problemas de CORS)
+   ========================================================================= */
+function fetchScript(action, params, callback) {
+  var cbName = 'planner_cb_' + Date.now() + '_' + Math.floor(Math.random() * 9999);
+  window[cbName] = function (data) {
+    try { delete window[cbName]; } catch (e) {}
+    callback(data);
+  };
+  var tag = document.createElement('script');
+  var qs = '?action=' + encodeURIComponent(action) + '&callback=' + cbName;
+  Object.keys(params || {}).forEach(function (k) {
+    if (k === 'body') {
+      qs += '&body=' + encodeURIComponent(JSON.stringify(params.body));
+    } else {
+      qs += '&' + k + '=' + encodeURIComponent(params[k]);
+    }
+  });
+  tag.src = URL_SCRIPT + qs;
+  tag.onerror = function () {
+    try { tag.remove(); } catch (e) {}
+    callback({ success: false, error: 'Error de red al conectar con el servidor.' });
+  };
+  tag.onload = function () { try { tag.remove(); } catch (e) {} };
+  document.body.appendChild(tag);
+}
 
 /* =========================================================================
    HELPERS DE API (promisificando api.call)
@@ -288,6 +364,7 @@ function odometerBlock(v) {
 function renderFleet(groupId, groupName, vehicles, readings) {
   var main = document.getElementById('mainContent');
   main.innerHTML = '';
+  STATE.vehiculosActuales = vehicles;
 
   var wrap = el('div', {});
   var canGoBack = STATE.level !== 'cliente' || STATE.scopeGroupId !== groupId;
@@ -300,7 +377,12 @@ function renderFleet(groupId, groupName, vehicles, readings) {
 
   var fh = el('div', { class: 'fleet-header' }, [
     el('div', { class: 'section-title', style: 'margin:0;' }, [document.createTextNode('Unidades')]),
-    el('div', { class: 'fleet-count' }, [document.createTextNode(vehicles.length + ' vehículo(s)')])
+    el('div', { style: 'display:flex;align-items:center;gap:12px;' }, [
+      el('button', { class: 'btn-nuevo-plan', onclick: function () { abrirPanelPlanes(groupId); } }, [
+        document.createTextNode('+ Nuevo plan / Asignar unidades')
+      ]),
+      el('div', { class: 'fleet-count' }, [document.createTextNode(vehicles.length + ' vehículo(s)')])
+    ])
   ]);
   wrap.appendChild(fh);
 
@@ -320,6 +402,329 @@ function renderFleet(groupId, groupName, vehicles, readings) {
   });
   wrap.appendChild(grid);
   main.appendChild(wrap);
+}
+
+/* =========================================================================
+   MÓDULO: CREAR PLAN + ASIGNAR UNIDADES
+   ========================================================================= */
+var PANEL_STATE = { groupId: null, tipoPlan: 'Mantenimiento', planCreado: null };
+
+function cerrarPanelPlanes() {
+  var overlay = document.getElementById('pmOverlay');
+  if (overlay) overlay.remove();
+}
+
+function crearOverlay() {
+  cerrarPanelPlanes();
+  var overlay = el('div', { class: 'pm-overlay', id: 'pmOverlay' });
+  var box = el('div', { class: 'pm-box', id: 'pmBox' });
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function (ev) {
+    if (ev.target === overlay) cerrarPanelPlanes();
+  });
+  return box;
+}
+
+function abrirPanelPlanes(groupId) {
+  PANEL_STATE.groupId = groupId;
+  PANEL_STATE.planCreado = null;
+
+  var box = crearOverlay();
+  box.appendChild(el('div', { class: 'pm-title' }, [
+    document.createTextNode('Planes de esta empresa'),
+    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+  ]));
+
+  var lista = el('div', { class: 'pm-lista-planes', id: 'pmListaPlanes' }, [
+    el('div', { style: 'color:#5B6B74;font-size:12px;' }, [document.createTextNode('Cargando planes…')])
+  ]);
+  box.appendChild(lista);
+
+  box.appendChild(el('div', { class: 'pm-actions' }, [
+    el('button', { class: 'pm-btn pm-btn-primary', onclick: function () { mostrarFormNuevoPlan(groupId); } }, [
+      document.createTextNode('+ Crear plan nuevo')
+    ])
+  ]));
+
+  fetchScript('getPlanes', { groupId: groupId }, function (res) {
+    var listaEl = document.getElementById('pmListaPlanes');
+    if (!listaEl) return;
+    if (!res.success) {
+      listaEl.innerHTML = '';
+      listaEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al cargar planes.')]));
+      return;
+    }
+    var todos = (res.mantenimiento || []).map(function (p) { return { p: p, tipo: 'Mantenimiento' }; })
+      .concat((res.documentacion || []).map(function (p) { return { p: p, tipo: 'Documentación' }; }));
+
+    listaEl.innerHTML = '';
+    if (todos.length === 0) {
+      listaEl.appendChild(el('div', { style: 'color:#5B6B74;font-size:12px;' }, [document.createTextNode('Todavía no hay planes creados para esta empresa.')]));
+      return;
+    }
+    todos.forEach(function (item) {
+      var nombre = item.tipo === 'Mantenimiento' ? item.p['Nombre del plan'] : item.p['Tipo de documento'];
+      var meta = item.tipo === 'Mantenimiento'
+        ? (item.p['Intervalo (número)'] + ' ' + item.p['Unidad (Km/Horas)'])
+        : ('Vigencia: ' + (item.p['Vigencia - años'] || 0) + 'a ' + (item.p['Vigencia - meses'] || 0) + 'm');
+      listaEl.appendChild(el('div', { class: 'pm-plan-item' }, [
+        el('div', {}, [
+          el('div', { class: 'nombre' }, [document.createTextNode(nombre)]),
+          el('div', { class: 'meta' }, [document.createTextNode(item.tipo + ' · ' + meta)])
+        ]),
+        el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { mostrarSeleccionUnidades(item.p['PlanID'], item.tipo); } }, [
+          document.createTextNode('Asignar unidades')
+        ])
+      ]));
+    });
+  });
+}
+
+function mostrarFormNuevoPlan(groupId) {
+  PANEL_STATE.tipoPlan = 'Mantenimiento';
+  var box = crearOverlay();
+  box.appendChild(el('div', { class: 'pm-title' }, [
+    document.createTextNode('Crear nuevo plan'),
+    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+  ]));
+
+  var tabs = el('div', { class: 'pm-tabs' }, [
+    el('div', { class: 'pm-tab activo', id: 'tabMtto', onclick: function () { cambiarTabPlan('Mantenimiento'); } }, [document.createTextNode('Mantenimiento')]),
+    el('div', { class: 'pm-tab', id: 'tabDoc', onclick: function () { cambiarTabPlan('Documentación'); } }, [document.createTextNode('Documentación')])
+  ]);
+  box.appendChild(tabs);
+
+  box.appendChild(el('div', { id: 'pmCamposPlan' }));
+  box.appendChild(el('div', { id: 'pmMsgPlan' }));
+  box.appendChild(el('div', { class: 'pm-actions' }, [
+    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { abrirPanelPlanes(groupId); } }, [document.createTextNode('Volver')]),
+    el('button', { class: 'pm-btn pm-btn-primary', id: 'btnGuardarPlan', onclick: function () { guardarNuevoPlan(groupId); } }, [document.createTextNode('Guardar plan')])
+  ]));
+
+  renderCamposPlan();
+}
+
+function cambiarTabPlan(tipo) {
+  PANEL_STATE.tipoPlan = tipo;
+  document.getElementById('tabMtto').className = 'pm-tab' + (tipo === 'Mantenimiento' ? ' activo' : '');
+  document.getElementById('tabDoc').className = 'pm-tab' + (tipo === 'Documentación' ? ' activo' : '');
+  renderCamposPlan();
+}
+
+function renderCamposPlan() {
+  var cont = document.getElementById('pmCamposPlan');
+  cont.innerHTML = '';
+  if (PANEL_STATE.tipoPlan === 'Mantenimiento') {
+    cont.appendChild(el('div', { class: 'pm-field' }, [
+      el('label', {}, [document.createTextNode('Nombre del plan (opcional)')]),
+      el('input', { id: 'campoNombrePlan', placeholder: 'Ej. Cambio de aceite' })
+    ]));
+    cont.appendChild(el('div', { class: 'pm-row2' }, [
+      el('div', { class: 'pm-field' }, [
+        el('label', {}, [document.createTextNode('Intervalo')]),
+        el('input', { id: 'campoIntervalo', type: 'number', placeholder: '5000' })
+      ]),
+      el('div', { class: 'pm-field' }, [
+        el('label', {}, [document.createTextNode('Unidad')]),
+        el('select', { id: 'campoUnidad' }, [
+          el('option', { value: 'Km' }, [document.createTextNode('Kilómetros')]),
+          el('option', { value: 'Horas' }, [document.createTextNode('Horas (horómetro)')])
+        ])
+      ])
+    ]));
+    cont.appendChild(el('div', { class: 'pm-field' }, [
+      el('label', {}, [document.createTextNode('Tipo de servicio (opcional, ej: B1, A1, C)')]),
+      el('input', { id: 'campoTipoServicio', placeholder: 'Ej. Tipo C' })
+    ]));
+  } else {
+    cont.appendChild(el('div', { class: 'pm-field' }, [
+      el('label', {}, [document.createTextNode('Tipo de documento')]),
+      el('input', { id: 'campoTipoDoc', placeholder: 'Ej. SOAT, RTV, Tarjeta de operación' })
+    ]));
+    cont.appendChild(el('div', { class: 'pm-row2' }, [
+      el('div', { class: 'pm-field' }, [
+        el('label', {}, [document.createTextNode('Vigencia (años)')]),
+        el('input', { id: 'campoVigAnios', type: 'number', value: '1' })
+      ]),
+      el('div', { class: 'pm-field' }, [
+        el('label', {}, [document.createTextNode('Vigencia (meses extra)')]),
+        el('input', { id: 'campoVigMeses', type: 'number', value: '0' })
+      ])
+    ]));
+  }
+}
+
+function guardarNuevoPlan(groupId) {
+  var msgEl = document.getElementById('pmMsgPlan');
+  var btn = document.getElementById('btnGuardarPlan');
+  msgEl.innerHTML = '';
+
+  if (PANEL_STATE.tipoPlan === 'Mantenimiento') {
+    var intervalo = document.getElementById('campoIntervalo').value;
+    var unidad = document.getElementById('campoUnidad').value;
+    if (!intervalo) {
+      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode('Ingresa el intervalo.')]));
+      return;
+    }
+    btn.disabled = true;
+    fetchScript('crearPlanMtto', {
+      body: {
+        groupId: groupId,
+        nombrePlan: document.getElementById('campoNombrePlan').value,
+        intervalo: intervalo,
+        unidad: unidad,
+        tipoServicio: document.getElementById('campoTipoServicio').value
+      }
+    }, function (res) {
+      btn.disabled = false;
+      if (res.success) {
+        mostrarSeleccionUnidades(res.planId, 'Mantenimiento');
+      } else {
+        msgEl.innerHTML = '';
+        msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al guardar.')]));
+      }
+    });
+  } else {
+    var tipoDoc = document.getElementById('campoTipoDoc').value;
+    if (!tipoDoc) {
+      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode('Ingresa el tipo de documento.')]));
+      return;
+    }
+    btn.disabled = true;
+    fetchScript('crearPlanDoc', {
+      body: {
+        groupId: groupId,
+        tipoDocumento: tipoDoc,
+        vigenciaAnios: document.getElementById('campoVigAnios').value,
+        vigenciaMeses: document.getElementById('campoVigMeses').value
+      }
+    }, function (res) {
+      btn.disabled = false;
+      if (res.success) {
+        mostrarSeleccionUnidades(res.planId, 'Documentación');
+      } else {
+        msgEl.innerHTML = '';
+        msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al guardar.')]));
+      }
+    });
+  }
+}
+
+function mostrarSeleccionUnidades(planId, tipoPlan) {
+  PANEL_STATE.planCreado = planId;
+  PANEL_STATE.tipoPlan = tipoPlan;
+
+  var box = crearOverlay();
+  box.appendChild(el('div', { class: 'pm-title' }, [
+    document.createTextNode('Selecciona las unidades'),
+    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+  ]));
+
+  var barraSeleccion = el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;' }, [
+    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { marcarTodasLasUnidades(true); } }, [document.createTextNode('Seleccionar todas')]),
+    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { marcarTodasLasUnidades(false); } }, [document.createTextNode('Quitar selección')])
+  ]);
+  box.appendChild(barraSeleccion);
+
+  var listaUnidades = el('div', { id: 'pmListaUnidades', style: 'max-height:260px;overflow-y:auto;border:1px solid #DFE5E8;border-radius:8px;padding:4px 10px;' });
+  STATE.vehiculosActuales.forEach(function (v) {
+    listaUnidades.appendChild(el('div', { class: 'pm-unidad-row' }, [
+      el('input', { type: 'checkbox', id: 'chk_' + v.id, 'data-deviceid': v.id, 'data-nombre': v.name }),
+      el('label', { onclick: function () { document.getElementById('chk_' + v.id).click(); } }, [document.createTextNode(v.name)])
+    ]));
+  });
+  box.appendChild(listaUnidades);
+
+  box.appendChild(el('div', { class: 'pm-actions' }, [
+    el('button', { class: 'pm-btn pm-btn-outline', onclick: cerrarPanelPlanes }, [document.createTextNode('Cancelar')]),
+    el('button', { class: 'pm-btn pm-btn-primary', onclick: mostrarTablaValorInicial }, [document.createTextNode('Continuar →')])
+  ]));
+}
+
+function marcarTodasLasUnidades(valor) {
+  document.querySelectorAll('#pmListaUnidades input[type=checkbox]').forEach(function (chk) { chk.checked = valor; });
+}
+
+function mostrarTablaValorInicial() {
+  var seleccionadas = Array.prototype.slice.call(document.querySelectorAll('#pmListaUnidades input[type=checkbox]:checked'))
+    .map(function (chk) { return { deviceId: chk.dataset.deviceid, nombre: chk.dataset.nombre }; });
+
+  if (seleccionadas.length === 0) {
+    alert('Selecciona al menos una unidad.');
+    return;
+  }
+
+  var esMtto = PANEL_STATE.tipoPlan === 'Mantenimiento';
+  var box = crearOverlay();
+  box.appendChild(el('div', { class: 'pm-title' }, [
+    document.createTextNode('Valor inicial por unidad'),
+    el('button', { class: 'pm-close', onclick: cerrarPanelPlanes }, [document.createTextNode('×')])
+  ]));
+  box.appendChild(el('div', { style: 'font-size:11.5px;color:#5B6B74;margin-bottom:8px;' }, [
+    document.createTextNode(esMtto ? 'Ingresa el último km/hora de servicio de cada unidad.' : 'Ingresa la fecha de carga actual (dd/mm/aaaa) de cada unidad.')
+  ]));
+
+  var tabla = el('table', { class: 'pm-tabla-valor' });
+  tabla.appendChild(el('thead', {}, [el('tr', {}, [
+    el('th', {}, [document.createTextNode('Unidad')]),
+    el('th', {}, [document.createTextNode(esMtto ? 'Km / Horas' : 'Fecha de carga')])
+  ])]));
+  var tbody = el('tbody', { id: 'pmTbodyValores' });
+  seleccionadas.forEach(function (u) {
+    tbody.appendChild(el('tr', {}, [
+      el('td', {}, [document.createTextNode(u.nombre)]),
+      el('td', {}, [el('input', {
+        id: 'valor_' + u.deviceId,
+        type: esMtto ? 'number' : 'text',
+        placeholder: esMtto ? '15850' : 'dd/mm/aaaa'
+      })])
+    ]));
+  });
+  tabla.appendChild(tbody);
+  box.appendChild(tabla);
+
+  box.appendChild(el('div', { id: 'pmMsgAsignacion' }));
+  box.appendChild(el('div', { class: 'pm-actions' }, [
+    el('button', { class: 'pm-btn pm-btn-outline', onclick: function () { mostrarSeleccionUnidades(PANEL_STATE.planCreado, PANEL_STATE.tipoPlan); } }, [document.createTextNode('← Volver')]),
+    el('button', { class: 'pm-btn pm-btn-primary', id: 'btnGuardarAsignacion', onclick: function () { guardarAsignacion(seleccionadas); } }, [document.createTextNode('Guardar asignación')])
+  ]));
+}
+
+function guardarAsignacion(seleccionadas) {
+  var msgEl = document.getElementById('pmMsgAsignacion');
+  var btn = document.getElementById('btnGuardarAsignacion');
+  msgEl.innerHTML = '';
+
+  var unidades = seleccionadas.map(function (u) {
+    var valor = document.getElementById('valor_' + u.deviceId).value;
+    return { deviceId: u.deviceId, nombre: u.nombre, valorInicial: valor };
+  });
+
+  if (unidades.some(function (u) { return !u.valorInicial; })) {
+    msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode('Completa el valor de todas las unidades.')]));
+    return;
+  }
+
+  btn.disabled = true;
+  fetchScript('asignarPlan', {
+    body: {
+      planId: PANEL_STATE.planCreado,
+      tipoPlan: PANEL_STATE.tipoPlan,
+      usuario: (STATE.user && STATE.user.name) || STATE.sessionUserName || 'sistema',
+      unidades: unidades
+    }
+  }, function (res) {
+    btn.disabled = false;
+    if (res.success) {
+      msgEl.innerHTML = '';
+      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-ok' }, [document.createTextNode('¡Listo! ' + unidades.length + ' unidad(es) asignada(s) correctamente.')]));
+      setTimeout(cerrarPanelPlanes, 1400);
+    } else {
+      msgEl.innerHTML = '';
+      msgEl.appendChild(el('div', { class: 'pm-msg pm-msg-error' }, [document.createTextNode(res.error || 'Error al guardar la asignación.')]));
+    }
+  });
 }
 
 /* =========================================================================
