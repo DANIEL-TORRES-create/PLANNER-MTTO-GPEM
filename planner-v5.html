@@ -378,7 +378,15 @@ function renderFleet(groupId, groupName, vehicles, readings) {
   var fh = el('div', { class: 'fleet-header' }, [
     el('div', { class: 'section-title', style: 'margin:0;' }, [document.createTextNode('Unidades')]),
     el('div', { style: 'display:flex;align-items:center;gap:12px;' }, [
-      el('button', { class: 'btn-nuevo-plan', onclick: function () { abrirPanelPlanes(groupId); } }, [
+      el('button', { class: 'btn-nuevo-plan', onclick: function () {
+        alert('DIAGNÓSTICO: el botón sí detecta el clic. Ahora intento abrir el panel...');
+        try {
+          abrirPanelPlanes(groupId);
+          alert('DIAGNÓSTICO: abrirPanelPlanes() se ejecutó sin errores.');
+        } catch (errClic) {
+          alert('DIAGNÓSTICO — ERROR ATRAPADO: ' + errClic.message + '\\n\\n' + errClic.stack);
+        }
+      } }, [
         document.createTextNode('+ Nuevo plan / Asignar unidades')
       ]),
       el('div', { class: 'fleet-count' }, [document.createTextNode(vehicles.length + ' vehículo(s)')])
@@ -824,8 +832,8 @@ var _resizeTimeout;
 window.addEventListener('resize', function () {
   clearTimeout(_resizeTimeout);
   _resizeTimeout = setTimeout(function () {
-    validarLayoutResponsive('resize / cambio de pantalla');
     forzarEstiloHeader();
+    validarLayoutResponsive('resize / cambio de pantalla');
   }, 300);
 });
 
@@ -915,13 +923,21 @@ var _intervaloEstilo = setInterval(function () {
 
 // También reacciona de inmediato si detecta cambios en el propio header
 // (por si MyGeotab lo reemplaza o le toca atributos directamente).
+// IMPORTANTE: como forzarEstiloHeader() modifica el mismo atributo 'style'
+// que estamos observando, hace falta un candado para no retroalimentarse
+// en un bucle infinito (el observador dispara la función, la función
+// cambia el estilo, eso vuelve a disparar al observador...).
+var _aplicandoEstilo = false;
 var _observerHeader = new MutationObserver(function () {
+  if (_aplicandoEstilo) return; // evita el bucle infinito
+  _aplicandoEstilo = true;
   forzarEstiloHeader();
+  setTimeout(function () { _aplicandoEstilo = false; }, 50);
 });
 function iniciarObservadorHeader() {
   var header = document.querySelector('header.topbar');
   if (header) {
-    _observerHeader.observe(header, { attributes: true, attributeFilter: ['style', 'class'] });
+    _observerHeader.observe(header, { attributes: true, attributeFilter: ['class'] });
     _observerHeader.observe(document.body, { childList: true, subtree: false });
   }
 }
