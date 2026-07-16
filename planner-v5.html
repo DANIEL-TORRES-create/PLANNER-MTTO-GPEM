@@ -338,6 +338,7 @@ function selectCompany(groupId) {
     var ids = vehicles.map(function (v) { return v.id; });
     return loadOdoHoro(ids).then(function (readings) {
       renderFleet(groupId, groupName, vehicles, readings);
+      validarLayoutResponsive('después de cargar flota de ' + groupName);
     });
   }).catch(function (err) {
     renderError('No se pudieron cargar las unidades de esta empresa.<br><code class="inline">' + (err && err.message || err) + '</code>');
@@ -370,12 +371,55 @@ function boot() {
           // super-admin, sub-admin, o cliente con sub-categorías propias -> mostrar selector
           renderCompanyPicker();
         }
+
+        validarLayoutResponsive('carga inicial');
       });
     })
     .catch(function (err) {
       renderError('No se pudo resolver la sesión del usuario.<br><code class="inline">' + (err && err.message || err) + '</code>');
     });
 }
+
+/* =========================================================================
+   AUTODIAGNÓSTICO DE LAYOUT (se adapta solo a cualquier ancho de pantalla,
+   y avisa en consola si alguna vez algo queda descuadrado)
+   ========================================================================= */
+function validarLayoutResponsive(motivo) {
+  var header = document.querySelector('header.topbar');
+  if (!header) return;
+
+  var anchoVentana = window.innerWidth;
+  var rect = header.getBoundingClientRect();
+  var margenIzq = Math.round(rect.left);
+  var margenDer = Math.round(anchoVentana - rect.right);
+  var diferencia = Math.abs(margenIzq - margenDer);
+  var hayOverflow = document.body.scrollWidth > document.body.clientWidth;
+
+  var resultado = {
+    motivo: motivo,
+    anchoVentana: anchoVentana,
+    margenIzquierdo: margenIzq,
+    margenDerecho: margenDer,
+    simetrico: diferencia <= 1,
+    overflowHorizontal: hayOverflow
+  };
+
+  if (diferencia > 1 || hayOverflow) {
+    console.warn('[Planner] Layout posiblemente descuadrado:', resultado);
+  } else {
+    console.log('[Planner] Layout OK para este ancho de pantalla:', resultado);
+  }
+}
+
+// Revalida automáticamente cada vez que la ventana cambia de tamaño
+// (cambio de monitor, resize, rotar pantalla, etc.)
+var _resizeTimeout;
+window.addEventListener('resize', function () {
+  clearTimeout(_resizeTimeout);
+  _resizeTimeout = setTimeout(function () {
+    validarLayoutResponsive('resize / cambio de pantalla');
+  }, 300);
+});
 
 /* =========================================================================
    INTEGRACIÓN CON EL FRAMEWORK DE ADD-INS DE MYGEOTAB
