@@ -414,36 +414,59 @@ function validarLayoutResponsive(motivo) {
 }
 
 // Revalida automáticamente cada vez que la ventana cambia de tamaño
-// (cambio de monitor, resize, rotar pantalla, etc.)
+// (cambio de monitor, resize, rotar pantalla, colapsar/expandir menú, etc.)
 var _resizeTimeout;
 window.addEventListener('resize', function () {
   clearTimeout(_resizeTimeout);
   _resizeTimeout = setTimeout(function () {
     validarLayoutResponsive('resize / cambio de pantalla');
+    forzarEstiloHeader();
   }, 300);
 });
 
 /* =========================================================================
-   VIGILANTE DE ESTILOS: MyGeotab parece reprocesar/sobreescribir el header
-   del Add-In unos segundos después de la carga inicial. Esto fuerza
-   nuestros estilos vía JS (máxima prioridad posible) y los reaplica
-   en bucle, para que ninguna sobreescritura tardía gane la pelea.
+   VIGILANTE DE ESTILOS + CORRECCIÓN DE ANCHO REAL
+   Descubrimos (con datos reales) que el contenedor que MyGeotab le da
+   al Add-In (#app, heredado de su MAIN.checkmateContent) mide el ANCHO
+   TOTAL de la ventana, pero está posicionado después del menú lateral
+   — así que se desborda a la derecha exactamente lo que mide el menú.
+   Por eso nunca hay que confiar en width:100%/auto: hay que calcular
+   el ancho REAL disponible = ventana completa - posición izquierda real,
+   y esto se recalcula cada vez (funciona igual sin importar el tamaño
+   de pantalla, o si el menú lateral está expandido o colapsado).
    ========================================================================= */
+function anchoSeguroDisponible() {
+  var app = document.getElementById('app');
+  if (!app) return window.innerWidth;
+  var offsetIzquierdo = app.getBoundingClientRect().left;
+  return Math.max(280, window.innerWidth - offsetIzquierdo);
+}
+
 function forzarEstiloHeader() {
   var header = document.querySelector('header.topbar');
   var sessionBox = document.getElementById('sessionBox');
   if (!header) return;
 
+  var anchoSeguro = anchoSeguroDisponible();
+  var margenLateral = 16;
+  var anchoHeader = anchoSeguro - (margenLateral * 2);
+
   var props = {
-    'margin': '16px 16px 0 16px',
+    'margin': '16px ' + margenLateral + 'px 0 ' + margenLateral + 'px',
     'border-radius': '10px',
-    'width': 'auto',
+    'width': anchoHeader + 'px',
+    'max-width': anchoHeader + 'px',
     'box-sizing': 'border-box',
     'background': 'linear-gradient(135deg, #12354A, #1B4B66)'
   };
   Object.keys(props).forEach(function (k) {
     header.style.setProperty(k, props[k], 'important');
   });
+
+  // También corrige #app y main para que jamás dependan del ancho
+  // inflado que nos entrega MyGeotab.
+  var app = document.getElementById('app');
+  if (app) app.style.setProperty('max-width', anchoSeguro + 'px', 'important');
 
   if (sessionBox) {
     sessionBox.style.setProperty('background', '#FFFFFF', 'important');
