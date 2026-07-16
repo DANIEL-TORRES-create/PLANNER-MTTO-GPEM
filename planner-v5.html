@@ -378,15 +378,7 @@ function renderFleet(groupId, groupName, vehicles, readings) {
   var fh = el('div', { class: 'fleet-header' }, [
     el('div', { class: 'section-title', style: 'margin:0;' }, [document.createTextNode('Unidades')]),
     el('div', { style: 'display:flex;align-items:center;gap:12px;' }, [
-      el('button', { class: 'btn-nuevo-plan', onclick: function () {
-        alert('DIAGNÓSTICO: el botón sí detecta el clic. Ahora intento abrir el panel...');
-        try {
-          abrirPanelPlanes(groupId);
-          alert('DIAGNÓSTICO: abrirPanelPlanes() se ejecutó sin errores.');
-        } catch (errClic) {
-          alert('DIAGNÓSTICO — ERROR ATRAPADO: ' + errClic.message + '\\n\\n' + errClic.stack);
-        }
-      } }, [
+      el('button', { class: 'btn-nuevo-plan', onclick: function () { abrirPanelPlanes(groupId); } }, [
         document.createTextNode('+ Nuevo plan / Asignar unidades')
       ]),
       el('div', { class: 'fleet-count' }, [document.createTextNode(vehicles.length + ' vehículo(s)')])
@@ -428,6 +420,43 @@ function crearOverlay() {
   var box = el('div', { class: 'pm-box', id: 'pmBox' });
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+
+  // Igual que con el header: forzamos por JS los estilos que hacen que
+  // esto sea un modal flotante de pantalla completa, porque el CSS solo
+  // (aunque tenga !important) puede terminar siendo ignorado dentro de
+  // MyGeotab. Esto garantiza que SIEMPRE se vea, sin importar el resto.
+  var propsOverlay = {
+    'position': 'fixed',
+    'top': '0', 'left': '0', 'right': '0', 'bottom': '0',
+    'width': '100vw', 'height': '100vh',
+    'background': 'rgba(18,32,43,.55)',
+    'display': 'flex',
+    'align-items': 'flex-start',
+    'justify-content': 'center',
+    'z-index': '2147483647', // el máximo z-index posible, gana contra cualquiera
+    'padding': '40px 16px',
+    'overflow-y': 'auto',
+    'margin': '0',
+    'box-sizing': 'border-box'
+  };
+  Object.keys(propsOverlay).forEach(function (k) {
+    overlay.style.setProperty(k, propsOverlay[k], 'important');
+  });
+
+  var propsBox = {
+    'background': '#ffffff',
+    'border-radius': '12px',
+    'width': '100%',
+    'max-width': '560px',
+    'padding': '22px',
+    'box-shadow': '0 12px 40px rgba(0,0,0,.35)',
+    'box-sizing': 'border-box',
+    'position': 'relative'
+  };
+  Object.keys(propsBox).forEach(function (k) {
+    box.style.setProperty(k, propsBox[k], 'important');
+  });
+
   overlay.addEventListener('click', function (ev) {
     if (ev.target === overlay) cerrarPanelPlanes();
   });
